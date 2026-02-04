@@ -1,0 +1,5 @@
+{
+  "name": "AI Assisted Writer",
+  "description": "A professional writing environment with real-time AI assistance, a countdown timer, and detailed event logging of the writing process and chat history.",
+  "requestFramePermissions": []
+}
