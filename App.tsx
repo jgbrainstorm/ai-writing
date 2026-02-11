@@ -41,12 +41,34 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : DEFAULT_CONFIG;
   });
 
+  const syncConfigFromStorage = useCallback(() => {
+    const saved = localStorage.getItem('app_config');
+    if (!saved) return;
+    try {
+      const parsed = JSON.parse(saved);
+      setAppConfig(parsed);
+    } catch (error) {
+      console.warn('Failed to parse app_config from storage:', error);
+    }
+  }, []);
+
   const contentRef = useRef('');
   const lastLoggedContentRef = useRef('');
 
   useEffect(() => {
     contentRef.current = essayContent;
   }, [essayContent]);
+
+  useEffect(() => {
+    // Keep backend runtime config aligned with admin dashboard settings.
+    fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(appConfig),
+    }).catch((error) => {
+      console.warn('Unable to sync config to backend:', error);
+    });
+  }, [appConfig]);
 
   // Sync timer limit with config changes
   useEffect(() => {
@@ -107,7 +129,17 @@ const App: React.FC = () => {
   };
 
   const handleSendMessage = async (message: string) => {
-    if (!isTimerRunning || isSubmitted) return;
+    if (isSubmitted) return;
+
+    if (!isTimerRunning) {
+      const userMsg: ChatMessage = { role: 'user', parts: [{ text: message }] };
+      const botMsg: ChatMessage = {
+        role: 'model',
+        parts: [{ text: 'Please click the START WRITING button to start.' }],
+      };
+      setChatHistory((prev) => [...prev, userMsg, botMsg]);
+      return;
+    }
 
     logEvent({
       session_id: sessionId,
@@ -122,7 +154,7 @@ const App: React.FC = () => {
     setIsTyping(true);
 
     try {
-      const aiResponse = await getChatResponse(message, chatHistory, essayContent);
+      const aiResponse = await getChatResponse(message, chatHistory, essayContent, appConfig);
       logEvent({
         session_id: sessionId,
         user_name: userName,
@@ -217,7 +249,13 @@ const App: React.FC = () => {
         </button>
         {isAdminPanelOpen && (
           <AdminPanel 
-            onClose={() => setIsAdminPanelOpen(false)} 
+            onClose={() => { syncConfigFromStorage(); setIsAdminPanelOpen(false); }} 
+            onBackToLogin={() => {
+              syncConfigFromStorage();
+              setIsAdminPanelOpen(false);
+              setAuthMode('user');
+              setAdminPassword('');
+            }}
             onConfigUpdate={(conf) => setAppConfig(conf)}
           />
         )}
@@ -228,69 +266,96 @@ const App: React.FC = () => {
   // Screen 2: User/Admin Login
   if (!isLoggedIn) {
     return (
-      <div className="h-screen w-screen bg-[#f8fafc] flex items-center justify-center relative p-6">
-        <div className="w-full max-w-lg bg-white p-12 rounded-[3rem] shadow-2xl shadow-indigo-100/50 border border-white">
-          <div className="text-center mb-12">
-            <div className="w-20 h-20 bg-indigo-600 text-white rounded-[1.5rem] flex items-center justify-center mx-auto mb-6 shadow-xl shadow-indigo-100">
-              <i className="fas fa-feather-pointed text-3xl"></i>
-            </div>
-            <h1 className="text-3xl font-black text-slate-800 tracking-tight">AI Writing</h1>
-            <p className="text-slate-400 font-bold mt-2 uppercase text-[10px] tracking-widest">Secure Assessment Platform</p>
-          </div>
-          <div className="flex gap-2 mb-8">
-            <button 
-              onClick={() => setAuthMode('user')}
-              className={`flex-1 py-3 rounded-2xl font-black uppercase text-sm tracking-widest ${authMode === 'user' ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-500 border border-slate-100'}`}
-            >
-              User Login
-            </button>
-            <button 
-              onClick={() => setAuthMode('admin')}
-              className={`flex-1 py-3 rounded-2xl font-black uppercase text-sm tracking-widest ${authMode === 'admin' ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-500 border border-slate-100'}`}
-            >
-              Admin Login
-            </button>
-          </div>
+      <div className="h-screen w-screen bg-gradient-to-br from-[#edf3ff] via-[#f7f9fc] to-[#e8eef8] flex items-center justify-center relative p-6 overflow-hidden">
+        <div className="absolute -top-28 -left-20 w-80 h-80 rounded-full bg-blue-200/35 blur-3xl"></div>
+        <div className="absolute -bottom-28 -right-16 w-96 h-96 rounded-full bg-cyan-200/35 blur-3xl"></div>
 
-          {authMode === 'user' ? (
-            <form onSubmit={handleUserLogin} className="space-y-8">
-              <div className="space-y-2">
-                <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Your Full Name</label>
-                <input 
-                  required
-                  autoFocus
-                  value={userName}
-                  onChange={(e) => setUserName(e.target.value)}
-                  placeholder="Enter full name"
-                  className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 outline-none font-bold text-slate-700 transition-all"
-                />
+        <div className="w-full max-w-6xl bg-white/90 backdrop-blur rounded-[2rem] shadow-2xl shadow-slate-300/35 border border-slate-200 overflow-hidden">
+          <div className="grid lg:grid-cols-[1.05fr_1fr]">
+            <div className="relative p-10 lg:p-12 bg-gradient-to-br from-[#204b8f] via-[#2f5fa6] to-[#4a78be] text-white">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.25),transparent_45%)]"></div>
+              <div className="relative">
+                <div className="w-16 h-16 rounded-2xl bg-white/20 border border-white/35 flex items-center justify-center mb-8">
+                  <i className="fas fa-feather-pointed text-2xl"></i>
+                </div>
+                <h1 className="text-4xl lg:text-5xl font-black tracking-tight leading-tight mb-4">Evaluating AI-assisted Writing</h1>
+                <p className="text-blue-100/90 uppercase tracking-[0.22em] text-xs font-bold mb-8">Secure Assessment Platform</p>
+                <div className="space-y-3 text-[15px] text-blue-50/95 font-semibold">
+                  <div className="flex items-center gap-3"><span className="w-2.5 h-2.5 rounded-full bg-cyan-200"></span>Secure event logging</div>
+                  <div className="flex items-center gap-3"><span className="w-2.5 h-2.5 rounded-full bg-cyan-200"></span>Timed writing evaluation</div>
+                  <div className="flex items-center gap-3"><span className="w-2.5 h-2.5 rounded-full bg-cyan-200"></span>AI-assisted feedback workflow</div>
+                </div>
               </div>
-              <button className="w-full bg-slate-900 text-white p-5 rounded-2xl font-black text-lg hover:bg-indigo-600 transition-all shadow-xl shadow-slate-200">
-                Begin Evaluation
-              </button>
-            </form>
-          ) : (
-            <form onSubmit={handleAdminAuth} className="space-y-8">
-              <div className="space-y-2">
-                <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Admin Password</label>
-                <input 
-                  type="password"
-                  autoFocus
-                  value={adminPassword}
-                  onChange={(e) => setAdminPassword(e.target.value)}
-                  placeholder="Enter password"
-                  className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 outline-none font-bold text-slate-700 transition-all text-center"
-                />
+            </div>
+
+            <div className="p-8 lg:p-10 bg-[#fbfdff]">
+              <div className="mb-7">
+                <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-bold mb-3">Access</div>
+                <div className="bg-white border border-slate-200 rounded-2xl p-1.5 grid grid-cols-2 gap-2 shadow-sm">
+                  <button
+                    onClick={() => setAuthMode('user')}
+                    className={`py-3 rounded-xl font-black uppercase text-sm tracking-widest transition-all ${
+                      authMode === 'user'
+                        ? 'bg-[#2f5fa6] text-white shadow-md'
+                        : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    User Login
+                  </button>
+                  <button
+                    onClick={() => setAuthMode('admin')}
+                    className={`py-3 rounded-xl font-black uppercase text-sm tracking-widest transition-all ${
+                      authMode === 'admin'
+                        ? 'bg-[#2f5fa6] text-white shadow-md'
+                        : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    Admin Login
+                  </button>
+                </div>
               </div>
-              <button className="w-full bg-indigo-600 text-white p-5 rounded-2xl font-black text-lg hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200">
-                Open Admin Dashboard
-              </button>
-            </form>
-          )}
+
+              {authMode === 'user' ? (
+                <form onSubmit={handleUserLogin} className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-xs font-black text-slate-600 uppercase tracking-widest ml-1">Your Full Name</label>
+                    <input
+                      required
+                      autoFocus
+                      value={userName}
+                      onChange={(e) => setUserName(e.target.value)}
+                      placeholder="Enter full name"
+                      className="w-full p-5 bg-white border-2 border-slate-300 rounded-2xl shadow-inner shadow-slate-100 focus:ring-4 focus:ring-blue-500/15 focus:border-[#2f5fa6] outline-none font-bold text-slate-700 placeholder:text-slate-400 transition-all"
+                    />
+                  </div>
+                  <button className="w-full bg-[#132a4d] text-white p-5 rounded-2xl font-black text-lg hover:bg-[#1d3d6d] transition-all shadow-xl shadow-slate-300/30">
+                    Begin Evaluation
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={handleAdminAuth} className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-xs font-black text-slate-600 uppercase tracking-widest ml-1">Admin Password</label>
+                    <input
+                      type="password"
+                      autoFocus
+                      value={adminPassword}
+                      onChange={(e) => setAdminPassword(e.target.value)}
+                      placeholder="Enter password"
+                      className="w-full p-5 bg-white border-2 border-slate-300 rounded-2xl shadow-inner shadow-slate-100 focus:ring-4 focus:ring-blue-500/15 focus:border-[#2f5fa6] outline-none font-bold text-slate-700 placeholder:text-slate-400 transition-all"
+                    />
+                  </div>
+                  <button className="w-full bg-[#2f5fa6] text-white p-5 rounded-2xl font-black text-lg hover:bg-[#244e89] transition-all shadow-xl shadow-blue-200/40">
+                    Open Admin Dashboard
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
         </div>
         {isAdminPanelOpen && (
           <AdminPanel 
-            onClose={() => setIsAdminPanelOpen(false)} 
+            onClose={() => { syncConfigFromStorage(); setIsAdminPanelOpen(false); }} 
             onConfigUpdate={(conf) => setAppConfig(conf)}
           />
         )}
@@ -300,40 +365,65 @@ const App: React.FC = () => {
 
   // Screen 3: Main Workspace
   return (
-    <div className="flex h-screen w-screen overflow-hidden text-slate-800 bg-[#f8fafc]">
+    <div className="flex h-screen w-screen overflow-hidden text-slate-900 bg-gradient-to-br from-[#f3f4f6] to-[#e5e7eb]">
       
       {/* Golden ratio layout: main area ~62%, chat ~38% */}
-      <div className="flex-[1.618] flex flex-col h-full overflow-y-auto custom-scrollbar p-10 space-y-8">
+      <div className="flex-[1.618] flex flex-col h-full overflow-y-auto custom-scrollbar p-6 space-y-5">
+        {/* Session Header */}
+        <div className="bg-[#2b4c7e] px-4 py-3 rounded-[1.25rem] border border-[#3b5f96] shadow-md">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="flex items-center gap-3 bg-[#355b8c] border border-[#4f75a4] rounded-2xl px-4 py-2">
+                <div className="w-10 h-10 bg-[#406a9a] rounded-xl border border-[#6f90b6] flex items-center justify-center text-white shadow-sm">
+                  <i className="fas fa-user text-sm"></i>
+                </div>
+                <div>
+                  <div className="text-[10px] font-black text-[#dbe7f5] uppercase tracking-widest">Active User</div>
+                  <div className="text-white font-black">{userName}</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 bg-[#0F766E] border border-[#14b8a6] rounded-2xl px-4 py-2">
+                <div className="text-[10px] font-black text-[#ccfbf1] uppercase tracking-widest">Time Left</div>
+                <Timer seconds={timeLeft} isActive={isTimerRunning} onTick={handleTick} />
+              </div>
+              <button 
+                onClick={openAdminPanel}
+                className="flex items-center gap-2 text-[#e6eef9] hover:text-white transition-colors px-4 py-2 rounded-2xl border border-[#6f90b6] bg-[#406a9a] hover:bg-[#4f79a8]"
+             >
+                <i className="fas fa-user-shield text-sm"></i>
+                <span className="text-[10px] font-black uppercase tracking-widest">Admin Dashboard</span>
+             </button>
+            </div>
+
+            {!isTimerRunning ? (
+              <button 
+                onClick={handleStartWriting}
+                className="bg-white text-[#2b4c7e] px-8 py-3 rounded-2xl font-black text-sm shadow-md hover:bg-[#f4f8fc] active:scale-95 transition-all flex items-center gap-3 uppercase tracking-widest"
+              >
+                <i className="fas fa-play text-xs opacity-80"></i>
+                Start Writing
+              </button>
+            ) : (
+              <button 
+                onClick={() => { if(window.confirm("Submit final evaluation? This cannot be undone.")) handleFinalSubmission("USER_SUBMITTED"); }}
+                className="bg-[#7fb3d5] text-[#143a52] px-10 py-3 rounded-2xl font-black transition-all text-sm uppercase tracking-widest shadow-md hover:bg-[#6ea6cc] active:scale-95"
+              >
+                Submit Final Essay
+              </button>
+            )}
+          </div>
+        </div>
         
         {/* Instruction */}
-        <div className="bg-gradient-to-br from-[#f7f9fc] via-white to-[#eef2f8] p-10 rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-200/30">
-          <div className="inline-flex items-center gap-3 mb-6 px-4 py-2 rounded-2xl bg-white/80 border border-slate-100 shadow-sm">
-            <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 shadow-inner shadow-indigo-100">
-               <i className="fas fa-file-invoice text-sm"></i>
-            </div>
-            <span className="text-[11px] font-black text-indigo-600 uppercase tracking-[0.35em]">Instruction</span>
-          </div>
-          <p className="text-slate-800 leading-relaxed font-bold text-xl">
+        <div className="bg-[#fffdf7] p-8 rounded-[1.75rem] border-2 border-[#e5dccb] shadow-sm">
+          <div className="mb-5 text-[12px] font-black text-[#9a3412] uppercase tracking-[0.32em]">Instruction</div>
+          <p className="text-slate-900 leading-relaxed font-bold text-xl">
             {appConfig.writingPrompt}
           </p>
         </div>
 
-        {/* Timer & Start centered */}
-        <div className="flex flex-col items-center gap-4">
-          <Timer seconds={timeLeft} isActive={isTimerRunning} onTick={handleTick} />
-          {!isTimerRunning && (
-            <button 
-              onClick={handleStartWriting}
-              className="bg-slate-900 text-white px-10 py-5 rounded-2xl font-black text-xl shadow-2xl shadow-slate-300 hover:bg-indigo-600 active:scale-95 transition-all flex items-center gap-3"
-            >
-              <i className="fas fa-play text-sm opacity-50"></i>
-              Start Writing
-            </button>
-          )}
-        </div>
-
         {/* Editor Box */}
-        <div className="flex-1 flex flex-col min-h-[500px]">
+        <div className="flex-1 flex flex-col min-h-[580px] bg-white border-2 border-slate-300 rounded-[1.75rem] p-3 shadow-md">
           <div className={`flex-1 transition-all duration-700 ${!isTimerRunning ? 'opacity-20 grayscale blur-sm pointer-events-none' : 'opacity-100'}`}>
             <Editor 
               content={essayContent} 
@@ -342,49 +432,17 @@ const App: React.FC = () => {
             />
           </div>
         </div>
-
-        {/* Footer Navigation & Actions */}
-        <div className="flex justify-between items-center bg-white px-10 py-6 rounded-[2.5rem] border border-white shadow-xl shadow-slate-200/20">
-           <div className="flex items-center gap-10">
-             <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-slate-300 shadow-inner">
-                  <i className="fas fa-user text-xs"></i>
-                </div>
-                <div>
-                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active User</div>
-                  <div className="text-slate-700 font-black">{userName}</div>
-                </div>
-             </div>
-             <div className="w-px h-8 bg-slate-100"></div>
-             <button 
-                onClick={openAdminPanel}
-                className="flex items-center gap-2 text-slate-300 hover:text-indigo-600 transition-colors group"
-             >
-                <i className="fas fa-user-shield text-sm"></i>
-                <span className="text-[10px] font-black uppercase tracking-widest">Admin Dashboard</span>
-             </button>
-           </div>
-           <button 
-            disabled={!isTimerRunning}
-            onClick={() => { if(window.confirm("Submit final evaluation? This cannot be undone.")) handleFinalSubmission("USER_SUBMITTED"); }}
-            className={`px-14 py-5 rounded-2xl font-black transition-all text-sm uppercase tracking-widest shadow-xl ${
-              !isTimerRunning ? 'bg-slate-50 text-slate-200 cursor-not-allowed shadow-none' : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-100 active:scale-95'
-            }`}
-          >
-            Submit Final Essay
-          </button>
-        </div>
       </div>
 
       {/* Chat Sidebar (golden ratio smaller side) */}
-      <div className="flex-[1] min-w-[320px] max-w-[520px] h-full shadow-2xl z-10 bg-white shrink-0 border-l border-slate-100">
+      <div className="flex-[1] min-w-[320px] max-w-[520px] h-full shadow-xl z-10 bg-[#f8fafc] shrink-0 border-l-2 border-slate-300">
         <Chat history={chatHistory} onSendMessage={handleSendMessage} isTyping={isTyping} />
       </div>
 
       {/* Modals */}
       {isAdminPanelOpen && (
         <AdminPanel 
-          onClose={() => setIsAdminPanelOpen(false)} 
+          onClose={() => { syncConfigFromStorage(); setIsAdminPanelOpen(false); }} 
           onConfigUpdate={(conf) => setAppConfig(conf)}
         />
       )}

@@ -11,7 +11,23 @@ interface ChatProps {
 const Chat: React.FC<ChatProps> = ({ history, onSendMessage, isTyping }) => {
   const [input, setInput] = useState('');
   const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [avatarIndex, setAvatarIndex] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const avatarCacheBusterRef = useRef(`${Date.now()}`);
+  const avatarCandidates = [
+    '/assistant-icon.png',
+    '/assistant-icon.jpg',
+    '/assistant-icon.jpeg',
+    '/assistant_icon.png',
+    '/assistant_icon.jpg',
+    '/assistant_icon.jpeg',
+    '/public/assistant-icon.png',
+    '/public/assistant-icon.jpg',
+    '/public/assistant-icon.jpeg',
+    './assistant-icon.png',
+  ];
+  const avatarSrc = `${avatarCandidates[avatarIndex]}?v=${avatarCacheBusterRef.current}`;
+  const avatarLoadFailed = avatarIndex >= avatarCandidates.length;
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -41,23 +57,34 @@ const Chat: React.FC<ChatProps> = ({ history, onSendMessage, isTyping }) => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-white select-text">
-      <div className="p-6 border-b border-slate-50 flex items-center justify-between shrink-0">
+    <div className="flex flex-col h-full bg-[#f8fafc] select-text">
+      <div className="p-6 border-b-2 border-slate-300 bg-[#e5e7eb] flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
-            <i className="fas fa-robot"></i>
+          <div className="w-10 h-10 rounded-xl overflow-hidden border border-slate-300 bg-white flex items-center justify-center">
+            {!avatarLoadFailed ? (
+              <img
+                src={avatarSrc}
+                alt="Assistant"
+                className="w-full h-full object-cover"
+                onError={() => setAvatarIndex((i) => i + 1)}
+              />
+            ) : (
+              <div className="w-full h-full bg-slate-100 text-slate-500 flex items-center justify-center">
+                <span className="text-[10px] font-bold">AI</span>
+              </div>
+            )}
           </div>
           <div>
             <h2 className="font-black text-slate-800 text-sm uppercase tracking-wider">Assistant</h2>
             <div className="flex items-center gap-1.5">
-               <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
-               <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Online</span>
+               <span className="w-1.5 h-1.5 bg-[#0f766e] rounded-full"></span>
+               <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Online</span>
             </div>
           </div>
         </div>
       </div>
       
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar bg-slate-50/30">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar bg-[#f8fafc]">
         {history.length === 0 && (
           <div className="text-center py-10 opacity-30 px-10">
             <i className="fas fa-comments text-4xl mb-4 text-slate-300"></i>
@@ -68,8 +95,8 @@ const Chat: React.FC<ChatProps> = ({ history, onSendMessage, isTyping }) => {
           <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`relative group max-w-[92%] rounded-2xl px-5 py-4 shadow-sm transition-all selection:bg-indigo-200 selection:text-indigo-900 ${
               msg.role === 'user' 
-                ? 'bg-indigo-600 text-white rounded-tr-none' 
-                : 'bg-white text-slate-700 rounded-tl-none border border-slate-100'
+                ? 'bg-[#2b4c7e] text-white rounded-tr-none border border-[#3b5f96]' 
+                : 'bg-white text-slate-800 rounded-tl-none border-2 border-slate-200'
             }`}>
               {/* Copy Button - Made more robust and less intrusive to selection */}
               <button 
@@ -78,7 +105,7 @@ const Chat: React.FC<ChatProps> = ({ history, onSendMessage, isTyping }) => {
                   handleCopyMessage(msg.parts[0].text, idx);
                 }}
                 className={`absolute -top-2 ${msg.role === 'user' ? '-left-2' : '-right-2'} p-2 rounded-xl border border-white shadow-lg transition-all opacity-0 group-hover:opacity-100 z-10 ${
-                  msg.role === 'user' ? 'bg-indigo-700 text-indigo-100' : 'bg-white text-slate-400'
+                  msg.role === 'user' ? 'bg-[#406a9a] text-[#e6eef9]' : 'bg-white text-slate-400'
                 } hover:scale-110 active:scale-95`}
                 title="Copy full message"
               >
@@ -100,7 +127,7 @@ const Chat: React.FC<ChatProps> = ({ history, onSendMessage, isTyping }) => {
         ))}
         {isTyping && (
           <div className="flex justify-start">
-            <div className="bg-white border border-slate-100 rounded-2xl px-5 py-3 rounded-tl-none flex items-center gap-1">
+            <div className="bg-white border-2 border-slate-200 rounded-2xl px-5 py-3 rounded-tl-none flex items-center gap-1">
               <span className="w-1 h-1 bg-slate-300 rounded-full animate-bounce"></span>
               <span className="w-1 h-1 bg-slate-300 rounded-full animate-bounce [animation-delay:0.2s]"></span>
               <span className="w-1 h-1 bg-slate-300 rounded-full animate-bounce [animation-delay:0.4s]"></span>
@@ -109,7 +136,7 @@ const Chat: React.FC<ChatProps> = ({ history, onSendMessage, isTyping }) => {
         )}
       </div>
 
-      <div className="p-6 border-t border-slate-50 shrink-0">
+      <div className="p-6 border-t-2 border-slate-300 bg-[#e5e7eb] shrink-0">
         <form onSubmit={handleSubmit} className="relative group">
           <input
             type="text"
@@ -117,14 +144,22 @@ const Chat: React.FC<ChatProps> = ({ history, onSendMessage, isTyping }) => {
             onChange={(e) => setInput(e.target.value)}
             disabled={isTyping}
             placeholder="Type your question..."
-            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-5 pr-14 text-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:bg-white focus:border-indigo-400 transition-all font-medium"
+            className="w-full bg-white border-2 border-slate-300 rounded-2xl py-4 pl-5 pr-14 text-sm focus:outline-none focus:ring-4 focus:ring-[#0f766e]/20 focus:bg-white focus:border-[#0f766e] transition-all font-medium"
           />
           <button
             type="submit"
             disabled={isTyping || !input.trim()}
-            className="absolute right-2 top-2 bottom-2 w-10 bg-slate-900 text-white rounded-xl hover:bg-indigo-600 disabled:bg-slate-200 transition-all flex items-center justify-center shadow-lg"
+            className="absolute right-2 top-2 bottom-2 w-10 bg-[#2b4c7e] text-white rounded-xl hover:bg-[#406a9a] disabled:bg-slate-200 transition-all flex items-center justify-center shadow-lg"
           >
-            <i className="fas fa-arrow-up text-xs"></i>
+            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" aria-hidden="true">
+              <path
+                d="M4 12L20 4L13 20L10.5 13.5L4 12Z"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </button>
         </form>
       </div>

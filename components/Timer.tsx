@@ -27,8 +27,8 @@ const Timer: React.FC<TimerProps> = ({ seconds, onTick, isActive }) => {
   const isLowTime = seconds < 60;
 
   return (
-    <div className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-mono text-2xl font-bold border-2 transition-colors ${
-      isLowTime ? 'bg-red-50 text-red-600 border-red-200' : 'bg-slate-50 text-slate-700 border-slate-200'
+    <div className={`flex items-center space-x-2 px-3 py-2 rounded-xl font-mono text-xl font-bold border-2 transition-colors ${
+      isLowTime ? 'bg-[#FEE2E2] text-[#991B1B] border-[#EF4444]' : 'bg-[#ecfdf5] text-[#0F766E] border-[#34d399]'
     }`}>
       <i className={`fas fa-clock ${isLowTime ? 'animate-pulse' : ''}`}></i>
       <span>{formatTime(seconds)}</span>

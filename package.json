@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:api": "node server.mjs",
+    "dev:full": "./scripts/dev-full.sh",
     "build": "vite build",
     "preview": "vite preview"
   },

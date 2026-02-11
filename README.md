@@ -15,6 +15,30 @@ View your app in AI Studio: https://ai.studio/apps/drive/144OW7AN3L-RQ9aXBJUJ-Uh
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
+2. Create `.env.local` with backend credentials (choose one provider):
+
+   ```bash
+   # Provider: azure (default)
+   LLM_PROVIDER=azure
+   AZURE_OPENAI_ENDPOINT=https://YOUR-RESOURCE.openai.azure.com
+   AZURE_OPENAI_API_KEY=your_azure_api_key
+   AZURE_OPENAI_DEPLOYMENT_NAME=your_deployment
+   AZURE_OPENAI_API_VERSION=2024-02-01
+
+   # Or provider: gemini
+   # LLM_PROVIDER=gemini
+   # GEMINI_API_KEY=your_gemini_key
+   # GEMINI_MODEL=gemini-2.0-flash
+   ```
+
+3. Start backend API (port `8787`):
+   `npm run dev:api`
+4. In another terminal, start frontend (port `3000`):
    `npm run dev`
+
+Frontend requests go to `/api/chat` and are proxied to the backend, so API keys stay on the server side.
+
+Or run both in one command:
+`npm run dev:full`
+
+Note: Admin Dashboard settings are now synced to backend via `/api/config`, so Azure values entered in the dashboard are used for chat calls.

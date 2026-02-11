@@ -7,9 +7,10 @@ import AnalyticsPanel from './AnalyticsPanel';
 interface AdminPanelProps {
   onClose: () => void;
   onConfigUpdate: (config: AppConfig) => void;
+  onBackToLogin?: () => void;
 }
 
-const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onConfigUpdate }) => {
+const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onConfigUpdate, onBackToLogin }) => {
   const [activeTab, setActiveTab] = useState<'settings' | 'logs' | 'analytics'>('settings');
   const [config, setConfig] = useState<AppConfig>(() => {
     const saved = localStorage.getItem('app_config');
@@ -28,6 +29,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onConfigUpdate }) => {
   });
   const [logs, setLogs] = useState<WritingEvent[]>([]);
   const [selectedSession, setSelectedSession] = useState<string>('');
+  const [logsSessionFilter, setLogsSessionFilter] = useState<string>('all');
+  const [expandedResult, setExpandedResult] = useState<WritingEvent | null>(null);
 
   useEffect(() => {
     if (config.provider !== 'azure') {
@@ -49,10 +52,25 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onConfigUpdate }) => {
     }
   }, [activeTab]);
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
   const sessions = useMemo(() => {
     const ids = Array.from(new Set(logs.map((l) => l.session_id)));
     return ids;
   }, [logs]);
+
+  const filteredLogs = useMemo(() => {
+    if (logsSessionFilter === 'all') return logs;
+    return logs.filter((l) => l.session_id === logsSessionFilter);
+  }, [logs, logsSessionFilter]);
 
   useEffect(() => {
     if (activeTab === 'analytics' && sessions.length > 0 && !selectedSession) {
@@ -73,22 +91,44 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onConfigUpdate }) => {
     };
   };
 
-  const handleSaveConfig = () => {
-    localStorage.setItem('app_config', JSON.stringify(config));
-    onConfigUpdate(config);
-    alert('Configuration saved!');
+  const handleSaveConfig = async () => {
+    const savedConfig = JSON.parse(JSON.stringify(config));
+    localStorage.setItem('app_config', JSON.stringify(savedConfig));
+    onConfigUpdate(savedConfig);
+
+    try {
+      const response = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(savedConfig),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.details || data?.error || `HTTP ${response.status}`);
+      }
+      alert('Configuration saved and synced to backend.');
+    } catch (error) {
+      console.error('Config sync error:', error);
+      alert('Configuration saved locally, but backend sync failed. Ensure backend is running.');
+    }
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-6xl h-[90vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4" onClick={onClose}>
+      <div
+        className="bg-white w-full max-w-6xl h-[90vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="p-6 border-b flex justify-between items-center bg-slate-50">
           <div>
             <h2 className="text-2xl font-bold text-slate-800">Admin Dashboard</h2>
             <p className="text-slate-500 text-sm">Session analytics and global configuration</p>
           </div>
-          <button onClick={onClose} className="p-3 hover:bg-slate-200 rounded-full transition-colors">
-            <i className="fas fa-times text-xl text-slate-400"></i>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors font-semibold text-sm"
+          >
+            Close
           </button>
         </div>
 
@@ -218,7 +258,20 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onConfigUpdate }) => {
           ) : activeTab === 'logs' ? (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
-                <div className="flex gap-3">
+                <div className="flex gap-3 items-center">
+                   <div className="space-y-1 w-72">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Filter By Session</label>
+                    <select 
+                      value={logsSessionFilter}
+                      onChange={(e) => setLogsSessionFilter(e.target.value)}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 focus:ring-4 focus:ring-indigo-500/10 outline-none"
+                    >
+                      <option value="all">All Sessions</option>
+                      {sessions.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                   </div>
                    <button onClick={exportLogs} className="bg-white border border-slate-200 px-6 py-2.5 rounded-xl font-bold text-slate-600 hover:bg-slate-50 transition-all flex items-center">
                      <i className="fas fa-download mr-2"></i> Export Data
                    </button>
@@ -227,7 +280,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onConfigUpdate }) => {
                    </button>
                 </div>
                 <div className="bg-slate-100 px-4 py-2 rounded-full text-xs font-black text-slate-500 uppercase tracking-widest">
-                  Total Events: {logs.length}
+                  Events Shown: {filteredLogs.length}
                 </div>
               </div>
               <div className="border border-slate-100 rounded-3xl overflow-hidden shadow-sm bg-white">
@@ -243,10 +296,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onConfigUpdate }) => {
                     </tr>
                   </thead>
                   <tbody>
-                    {logs.length === 0 ? (
+                    {filteredLogs.length === 0 ? (
                       <tr><td colSpan={6} className="p-20 text-center text-slate-400 font-medium italic">Database is empty.</td></tr>
                     ) : (
-                      logs.map((log, i) => (
+                      filteredLogs.map((log, i) => (
                         <tr key={i} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/30 transition-colors">
                           <td className="p-5 font-mono text-xs text-slate-400 whitespace-nowrap">
                             {new Date(log.event_start_time).toLocaleString()}
@@ -262,7 +315,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onConfigUpdate }) => {
                             </span>
                           </td>
                           <td className="p-5 text-slate-500 font-medium">{log.event_by}</td>
-                          <td className="p-5 text-slate-600 truncate max-w-[200px]">{log.event_result}</td>
+                          <td
+                            onDoubleClick={() => setExpandedResult(log)}
+                            className="p-5 text-slate-600 truncate max-w-[200px] cursor-zoom-in"
+                            title="Double-click to view full text"
+                          >
+                            {log.event_result}
+                          </td>
                         </tr>
                       ))
                     )}
@@ -291,6 +350,35 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onConfigUpdate }) => {
               <AnalyticsPanel logs={logs} sessionId={selectedSession} />
             </div>
           )}
+        </div>
+        {expandedResult && (
+          <div className="fixed inset-0 z-[120] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-6" onClick={() => setExpandedResult(null)}>
+            <div className="bg-white w-full max-w-3xl rounded-2xl border border-slate-200 shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-black uppercase tracking-widest text-slate-600">Full Event Result</h4>
+                  <p className="text-xs text-slate-400 mt-1">{expandedResult.event_name} · {expandedResult.event_by} · {new Date(expandedResult.event_start_time).toLocaleString()}</p>
+                </div>
+                <button onClick={() => setExpandedResult(null)} className="px-3 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 font-semibold text-sm">Close</button>
+              </div>
+              <div className="p-6 max-h-[60vh] overflow-y-auto bg-slate-50">
+                <pre className="whitespace-pre-wrap break-words text-sm text-slate-700 leading-relaxed font-sans">{expandedResult.event_result}</pre>
+              </div>
+            </div>
+          </div>
+        )}
+        <div className="border-t bg-slate-50 p-4 flex items-center justify-between">
+          <span className="text-xs text-slate-500">Press Esc or click outside to close.</span>
+          <div className="flex items-center gap-3">
+            {onBackToLogin && (
+              <button
+                onClick={onBackToLogin}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors font-semibold text-sm"
+              >
+                Back to Login
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
